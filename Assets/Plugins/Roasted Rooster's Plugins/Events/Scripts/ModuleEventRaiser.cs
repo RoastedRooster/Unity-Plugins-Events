@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Remoting.Messaging;
 using UnityEngine;
 
 namespace rr.plugins.events {
@@ -14,11 +16,18 @@ namespace rr.plugins.events {
         // List of listeners
         public Dictionary<ModuleEvent, List<Action>> ListenerMap { get; private set; }
 
+        // List of triggered listeners to process
+        private List<Action> _triggeredListenerList;
+
+        // Is the component processing a listener
+        private bool _processingListener = false;
+
         /// <summary>
         /// Constructor, initialize the listener map before any call to it.
         /// </summary>
         public ModuleEventRaiser() {
             this.ListenerMap = new Dictionary<ModuleEvent, List<Action>>();
+            this._triggeredListenerList = new List<Action>();
         }
 
         /// <summary>
@@ -52,8 +61,30 @@ namespace rr.plugins.events {
 
             var listenerList = ListenerMap[pair.Key];
             foreach(var listener in listenerList) {
-                listener.Invoke();
+                _triggeredListenerList.Add(listener);
             }
+        }
+
+        /// <summary>
+        /// Process the triggered events sequencially.
+        /// </summary>
+        public void Update() {
+            if (_processingListener)
+                return;
+
+            var listener = _triggeredListenerList.FirstOrDefault();
+            if (listener == null)
+                return;
+
+            // Run the listener asynchronously.
+            _processingListener = true;
+            AsyncCallback callback = new AsyncCallback(ListenerProcessed);
+            IAsyncResult result = listener.BeginInvoke(callback, null);
+        }
+
+        private void ListenerProcessed(IAsyncResult result) {
+            _triggeredListenerList.Remove(((Action)((AsyncResult)result).AsyncDelegate));
+            _processingListener = false;
         }
     }
 
